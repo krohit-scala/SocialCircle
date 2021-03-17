@@ -6,5 +6,6 @@ case class User (
   age : Int,
   gender : String,
   city : String,
-  state : String
+  state : String,
+  ts: Long
 )

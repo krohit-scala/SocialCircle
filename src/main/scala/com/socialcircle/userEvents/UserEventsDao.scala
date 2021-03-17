@@ -8,6 +8,7 @@ import java.sql.Connection
 import com.socialcircle.utils.DBUtils
 import java.sql.ResultSet
 import com.socialcircle.utils.DBUtils
+import java.util.Calendar
 
 object UserEventsDao extends DBUtils {
 /*
@@ -51,6 +52,7 @@ object UserEventsDao extends DBUtils {
     var gender : String = null
     var city : String = null
     var state : String = null
+    var ts : Long = Calendar.getInstance.getTimeInMillis
     
     val query = s"""
         |SELECT a.*, b.city, b.state
@@ -62,9 +64,6 @@ object UserEventsDao extends DBUtils {
     // Connection object declaration
     var connection : Connection = null
 
-    // Resultset for the query 
-    var resultset : ResultSet = null
-
     try {
       // Make the connection
       // Class.forName(driver)
@@ -74,7 +73,8 @@ object UserEventsDao extends DBUtils {
       val statement = connection.createStatement()
       // println(query)
       
-      resultset = statement.executeQuery(query)
+    // Resultset for the query 
+      val resultset : ResultSet = statement.executeQuery(query)
       while (resultset != null && resultset.next) {
         val userId1 = Integer.parseInt(resultset.getString("id"))
         cityId = Integer.parseInt(resultset.getString("city_id"))
@@ -94,6 +94,6 @@ object UserEventsDao extends DBUtils {
     }
     
     // Return the result
-    User(userId, cityId, age, gender, city, state)
+    User(userId, cityId, age, gender, city, state, ts)
   }
 }

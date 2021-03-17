@@ -1,6 +1,5 @@
 package com.socialcircle.producer
 
-
 import java.util.Properties
 import com.google.gson.Gson
 import org.apache.kafka.clients.producer.Producer
@@ -9,7 +8,6 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.clients.producer.Callback
 import com.socialcircle.utils.PropertyFileUtils
-
 
 // Callback class for asynchronous producer
 class MyProducerCallBack extends Callback{
