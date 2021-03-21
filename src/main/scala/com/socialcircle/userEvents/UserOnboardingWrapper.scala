@@ -15,7 +15,8 @@ object UserOnboardingWrapper {
     val newUserJson = JsonUtils.getJsonFromObject(newUser)
     
     // Push the new user onboarding event to Kafka
-    KafkaProducerApi.sendSingleMessageProducer(PropertyFileUtils.getPropertyFromFile("kafka.new.user.topic"), newUserJson)
+    // KafkaProducerApi.sendSingleMessageProducer(PropertyFileUtils.getPropertyFromFile("kafka.new.user.topic"), newUserJson)
+    KafkaProducerApi.sendSingleMessageProducer("test1234", newUserJson)
     
     // Log message for reference
     println(s"User onboarded: ${newUserJson}")

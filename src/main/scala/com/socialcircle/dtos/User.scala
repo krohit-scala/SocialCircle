@@ -7,5 +7,6 @@ case class User (
   gender : String,
   city : String,
   state : String,
-  ts: Long
+  ts: Long,
+  isActive: Boolean
 )

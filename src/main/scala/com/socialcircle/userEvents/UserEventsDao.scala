@@ -94,6 +94,6 @@ object UserEventsDao extends DBUtils {
     }
     
     // Return the result
-    User(userId, cityId, age, gender, city, state, ts)
+    User(userId, cityId, age, gender, city, state, ts, true)
   }
 }

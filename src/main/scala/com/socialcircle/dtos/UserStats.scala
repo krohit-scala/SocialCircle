@@ -4,4 +4,4 @@ package com.socialcircle.dtos
 // Followers: Number of people following you
 // Followings: Number of people you follow
 
-case class UserCount (userId: String, followers: String, followings: String)
+case class UserStats (userId: String, followers: String, followings: String)

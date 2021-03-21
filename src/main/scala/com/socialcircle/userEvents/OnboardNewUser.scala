@@ -10,7 +10,7 @@ import com.socialcircle.utils.PropertyFileUtils
 object OnboardNewUser {
   
   // Set of all active users in Redis
-  val activeUserSetRedis = PropertyFileUtils.getPropertyFromFile("activeUserSetRedis")
+  val activeUserSetRedis = PropertyFileUtils.getPropertyFromFile("active.user.set.redis")
   
   // Onboard a randomly chosen new user
   def newUserOnboarding : User = {
@@ -29,6 +29,7 @@ object OnboardNewUser {
       val tempUserId = start + random.nextInt( (end - start) + 1)
       
       // Check if the user is already onboarded (in Redis)
+      // println(s"Checking for any existing user with id: ${tempUserId.toString}.")
       if(!RedisUtils.checkItemInSet(activeUserSetRedis, tempUserId.toString)){
         userAlreadyExists = false
         newUserId = tempUserId

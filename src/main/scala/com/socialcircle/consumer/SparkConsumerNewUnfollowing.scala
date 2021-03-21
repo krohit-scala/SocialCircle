@@ -7,8 +7,8 @@ import com.socialcircle.utils.SparkUtils
 import com.socialcircle.utils.PropertyFileUtils
 import org.apache.spark.sql.Encoders
 import com.socialcircle.dtos.User
-import org.apache.spark.sql.functions.{from_json, split, when}
-import com.socialcircle.dtos.UserCount
+import org.apache.spark.sql.functions.{from_json, split, when, count, coalesce}
+import com.socialcircle.dtos.UserStats
 import com.socialcircle.consumer.foreachwriters.RedisForeachWriter
 
 object SparkConsumerNewUnfollowing {
@@ -16,7 +16,7 @@ object SparkConsumerNewUnfollowing {
   // REDIS CONNECTOR - FOREACHWRITER SINK
   val redisHost = PropertyFileUtils.getPropertyFromFile("redis.server.ip")
   val redisPort = PropertyFileUtils.getPropertyFromFile("redis.server.port")
-  val userStatsHash = PropertyFileUtils.getPropertyFromFile("user.following.stats.hash")
+  val userStatsHash = PropertyFileUtils.getPropertyFromFile("user.stats.hash")
   
   val redisUserStatsWriter : RedisForeachWriter = new RedisForeachWriter(redisHost, redisPort, userStatsHash)
   
@@ -42,88 +42,112 @@ object SparkConsumerNewUnfollowing {
         "create_time", 
         split($"data", "\\|")(2)
       )
+  
+    /*
+    // Input Stream
+    +-----+-----+---+
+    |user1|user2|ts |
+    +-----+-----+---+
+    | 1001| 1002|ts1|
+    | 1002| 1001|ts2|
+    | 1003| 1004|ts3|
+		+-----+-----+---+
+		*/
+    
+    // Get aggregated followers and followings from Kafka Stream
+    val followingDf = newFollowingDf.groupBy("user1").agg(count("*").alias("followings1")).withColumnRenamed("user1", "uId1")
+    val followerDf = newFollowingDf.groupBy("user2").agg(count("*").alias("followers1")).withColumnRenamed("user2", "uId2")
+    val streamingSummaryDf = followingDf.join(
+      followerDf,
+      $"uId1" === $"uId2",
+      "full"
+    ).withColumn(
+      "uId",
+      coalesce($"uId1", $"uId2")
+    ).select(
+      "uId", "followers1", "followings1"
+    ).na.fill(0, Seq("followings1", "followers1"))
+
+    /*
+    // Summary Output
+    +------+---------+------------+
+    |uId   |followers1|followings1|
+    +------+----------+-----------+
+    | 1001 |         1|          1|
+    | 1002 |         1|          1|
+    | 1003 |         0|          1|
+    | 1004 |         1|          0|
+    +------+----------+-----------+
+    */
+    
     
     // Read user followers and followings
     // Followers: Number of people following you
     // Followings: Number of people you follow
-    val userCountsSchema = Encoders.product[UserCount].schema
+    val userStatsSchema = Encoders.product[UserStats].schema
     
     // How many followers a given user has?
     val userStatsDf = spark.read
       .format("org.apache.spark.sql.redis")
-      .schema(userCountsSchema)
-      .option("keys.pattern", "followerCount:*") 
+      .schema(userStatsSchema)
+      .option("keys.pattern", s"${userStatsHash}:*") 
       .load
       .selectExpr(
           "userId", 
-          "CAST(counts AS INTEGER) AS followers",
-          "CAST(counts AS INTEGER) AS followings"
-      )
-      
+          "CAST(followers AS INTEGER) AS followers",
+          "CAST(followings AS INTEGER) AS followings"
+      ).na.fill(0, Seq("followings", "followers"))
+    
     // For updating the followers/followings
-    val joinCondition1 = ($"user1" === $"userId")
-    val joinCondition2 = ($"user2" === $"userId")
-
-    // Join Streaming dataframe with followers/followings dataframe form Redis
-    // User1|User2 => User1 started following User2 | User1's following -= 1
-    val joinedDf1 = newFollowingDf.joinWith(
+    val joinCondition = ($"uId" === $"userId")
+    
+    // Merge streaming summary with the existing summary
+    val colList = Seq("followers", "followings", "followers1", "followings1") // List of columns for null handling
+    val newSummaryDf = streamingSummaryDf.joinWith(
       userStatsDf,
-      joinCondition1,
-      "left"
-    ).select(
-      "_1.*",
-      "_2.*"
-    ).withColumn(
-      "followings", 
-      when($"followings" === 0, 1).otherwise($"followings" - 1)
-    ).joinWith(
-      userStatsDf,
-      joinCondition2,
-      "left"
-    ).select(
-      "_1.*",
-      "_2.*"
-    ).withColumn(
-      "followings", 
-      when($"followers" === 0, 1).otherwise($"followers" - 1)
+      joinCondition,
+      "full"
+    ).withColumn(                                                                    // Fill the missing userId after join
+      "uId",
+      coalesce($"uId", $"userId").alias("userId")
+    ).na.fill(
+      0, colList
+    ).withColumn(                                                                    // Compute the new followers
+      "new_followers",
+      ($"followers" - $"followers1")
+    ).withColumn(                                                                    // Compute the new followings
+      "new_followings",
+      ($"followings" - $"followings1")
+    ).withColumn(                                                                    // Compute correction for any false incoming record
+      "new_followers",
+      when($"followers" < 0, 0).otherwise($"followers")
+    ).withColumn(                                                                    // Compute correction for any false incoming record
+      "new_followings",
+      when($"followings" < 0, 0).otherwise($"followings")
+    ).where(                                                                         // Identify the updates/new user connections
+      ($"new_followers" =!= $"followers") || ($"new_followings" =!= $"followings")
+    ).select(                                                                        // Select updates to be pushed to Redis Hash
+      $"userId",
+      $"new_followings".alias("followings"),
+      $"new_followers".alias("followers")
     )
     
-//    val joinedDf2 = newFollowingDf.joinWith(
-//      userStatsDf,
-//      joinCondition2,
-//      "left"
-//    ).select(
-//      "_1.*",
-//      "_2.*"
-//    ).withColumn(
-//      "followings", 
-//      when($"followers" === 0, 1).otherwise($"followers" - 1)
-//    )
+    // Console output writer (for logging)
+    val q1 = {
+      newSummaryDf.writeStream
+      .outputMode("update")
+      .format("console")
+      .start()
+    }
     
-    val userStatsUpdateDf1 = joinedDf1.selectExpr(
-      "userId", 
-      "CAST(followers AS STRING) AS followers",
-      "CAST(followings AS STRING) AS followings"
-    )
-
-//    val userStatsUpdateDf2 = joinedDf2.selectExpr(
-//      "userId", 
-//      "CAST(followers AS STRING) AS followers",
-//      "CAST(followings AS STRING) AS followings"
-//    )
-
-    val q1 = userStatsUpdateDf1.writeStream
+    // Update Redis Hash
+    val q2 = newSummaryDf.writeStream
       .outputMode("update")
       .foreach(redisUserStatsWriter)
       .start
 
-//    val q2 = userStatsUpdateDf2.writeStream
-//      .outputMode("update")
-//      .foreach(redisUserStatsWriter)
-//      .start
-    
     q1.awaitTermination
-//    q2.awaitTermination
+    q2.awaitTermination
     // User2's Followings decreased, thanks to User1
   }
 }

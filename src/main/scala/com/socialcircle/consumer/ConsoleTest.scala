@@ -7,35 +7,52 @@ import com.socialcircle.dtos.User
 import org.apache.spark.sql.functions.{from_json, split, when}
 import com.socialcircle.dtos.UserStats
 import com.socialcircle.consumer.foreachwriters.RedisForeachWriter
+import com.socialcircle.utils.SparkUtils
+import com.socialcircle.utils.PropertyFileUtils
 
-object SparkConsumerNewUsers {
+object ConsoleTest {
   def main(args: Array[String]): Unit = {
-  
-    // Get SparkSession object
     val spark = SparkUtils.getSparkSession
     import spark.implicits._
     
-    // 1. Read user onboarding data from Kafka
-    val newUserSchema = Encoders.product[User].schema
-    
-    val newUserDf = spark.readStream
+    val newUserDf = {
+      spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", PropertyFileUtils.getPropertyFromFile("kafka.bootstrap.servers"))
-      .option("subscribe", PropertyFileUtils.getPropertyFromFile("kafka.new.user.topic"))
-      .option("includeHeaders", "true")
+      .option("subscribe", "test1234")
       .load
-      .selectExpr("CAST(value AS STRING) AS jsonData")
+      .selectExpr(
+        "key",
+        "topic",
+        "partition",
+        "offset",
+        "timestamp",
+        "CAST(value AS STRING) AS jsonData"
+      )
+    }
+    
+    // Console output writer
+    val q1 = {
+      newUserDf.writeStream
+      .outputMode("update")
+      .format("console")
+      .start()
+    }
+    
+    // ES writer
+    val newUserSchema = Encoders.product[User].schema
+    val q2 = {
+      newUserDf
       .select(from_json($"jsonData", newUserSchema).as("data"))
       .select("data.*")
-      
-    // Write the new user data to Elasticsearch sink
-    val q1 = newUserDf.writeStream
+      .writeStream
       .outputMode("append")
       .format("org.elasticsearch.spark.sql")
-      .option("checkpointLocation", "~/app_logs/spark-streaming/new_user_onboarding/")
-      .start("social-circle-users")
+      .option("checkpointLocation", "~/app_logs/console/spark-streaming/new_user_onboarding/")
+      .start("test-new-users")
+    }
     
-    // Start Streaming :-)
     q1.awaitTermination
+    q2.awaitTermination
   }
 }
