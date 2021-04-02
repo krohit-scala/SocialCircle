@@ -10,6 +10,7 @@ import java.io.Serializable
 import org.neo4j.driver.{ Driver, GraphDatabase, AuthTokens, Result, Session }
 import com.socialcircle.consumer.foreachwriters.NewUserNeo4JForeachWriter
 import com.socialcircle.dtos.User
+import com.google.gson.Gson
 
 object Neo4JUtils extends Serializable {
 
@@ -34,10 +35,10 @@ object Neo4JUtils extends Serializable {
   def insertUser(user: User): Int = {
     //val session = neo4jdriver.session
     val session = initNeo4jDriverSession
-    // val genderLabel : String = if(user.gender == "Male" || user.gender == "male") "Male" else "Female"
+    val genderLabel : String = if(user.gender == "Male" || user.gender == "male") "Male" else "Female"
     val script : String = s"""
       |CREATE (
-      |  user:DummyUser{
+      |  user:DummyUser:${genderLabel} {
       |    a: "U${user.userId}",
       |    userId : "${user.userId}",
       |    cityId : "${user.cityId}",
@@ -49,7 +50,15 @@ object Neo4JUtils extends Serializable {
       |  }
       |)
       """.stripMargin
-    val result: Result = session.run(script)
+      
+    val script1 = s"""
+      |CREATE(
+      |  user:ActiveUsers ${JsonUtils.getJsonFromObject(user).replaceAll("\"(\\w+)\":", "$1:")}
+      |)
+      """.stripMargin
+    println(s"${script1}")
+    
+    val result: Result = session.run(script1)
     session.close()
     result.consume().counters().nodesCreated()
   }
