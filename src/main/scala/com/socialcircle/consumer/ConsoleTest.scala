@@ -9,6 +9,7 @@ import com.socialcircle.dtos.UserStats
 import com.socialcircle.consumer.foreachwriters.RedisForeachWriter
 import com.socialcircle.utils.SparkUtils
 import com.socialcircle.utils.PropertyFileUtils
+import com.socialcircle.consumer.foreachwriters.NewUserNeo4JForeachWriter
 
 object ConsoleTest {
   def main(args: Array[String]): Unit = {
@@ -52,7 +53,22 @@ object ConsoleTest {
       .start("test-new-users")
     }
     
+    // Neo4j Writer
+    // Instantiate the NewUserNeo4JForeachWriter
+    val newUserNeo4JForeachWriter = new NewUserNeo4JForeachWriter
+    
+    val q3 = {
+      newUserDf
+        .select("jsonData")
+        .as[String]
+        .writeStream
+        .outputMode("update")
+        .foreach(newUserNeo4JForeachWriter)
+        .start
+    }
+
     q1.awaitTermination
     q2.awaitTermination
+    q3.awaitTermination
   }
 }

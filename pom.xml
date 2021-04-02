@@ -179,6 +179,20 @@
 	    <artifactId>elasticsearch-hadoop</artifactId>
 	    <version>7.1.1</version>
 	</dependency>
+	<!-- https://mvnrepository.com/artifact/neo4j-contrib/neo4j-spark-connector -->
+    <!--     
+    <dependency>
+        <groupId>neo4j-contrib</groupId>
+        <artifactId>neo4j-connector-apache-spark_2.11_2.4</artifactId>
+        <version>4.0.1</version>
+    </dependency> 
+    -->
+    <!-- Java connector for Neo4J -->
+    <dependency>
+		<groupId>org.neo4j.driver</groupId>
+		<artifactId>neo4j-java-driver</artifactId>
+		<version>4.2.0</version>
+	</dependency>
     <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_2.11</artifactId>

@@ -1,13 +1,5 @@
-package com.socialcircle.drivers
+package com.socialcircle.producer
 
-import com.socialcircle.userEvents.OnboardNewUser
-import com.socialcircle.dtos.User
-import com.socialcircle.producer.KafkaProducerApi
-import com.google.gson.Gson
-import com.socialcircle.utils.JsonUtils
-
-import java.util.Timer
-import com.socialcircle.utils.RedisUtils
 import com.socialcircle.userEvents.FollowingEvents
 import com.socialcircle.userEvents.UserOnboardingWrapper
 

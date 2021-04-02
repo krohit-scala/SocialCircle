@@ -12,8 +12,6 @@ import org.apache.spark.sql.Dataset
 // Generic class that can be used for writing any record as Redis hash 
 // provided 0-th element of the record is treated as the id column for that record
 class RedisForeachWriter(val host: String, port: String, val hashName: String) extends ForeachWriter[Row]{
-  // val host: String = p_host
-  // val port: String = p_port
 
   var jedis: Jedis = _
 

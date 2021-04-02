@@ -23,7 +23,7 @@ class MyProducerCallBack extends Callback{
 // Main Kafka producer apis
 object KafkaProducerApi {
 	val props = new Properties()
-	props.put("bootstrap.servers", PropertyFileUtils.getPropertyFromFile("bootstrap.servers"))
+	props.put("bootstrap.servers", PropertyFileUtils.getPropertyFromFile("kafka.bootstrap.servers"))
 	props.put("key.serializer", PropertyFileUtils.getPropertyFromFile("key.serializer"))
 	props.put("value.serializer", PropertyFileUtils.getPropertyFromFile("value.serializer"))
   props.put("max.in.flight.requests.per.connection", PropertyFileUtils.getPropertyFromFile("max.in.flight.requests.per.connection"))
