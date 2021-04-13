@@ -49,7 +49,7 @@ object ConsoleTest {
       .writeStream
       .outputMode("append")
       .format("org.elasticsearch.spark.sql")
-      .option("checkpointLocation", "~/app_logs/console/spark-streaming/new_user_onboarding/")
+      .option("checkpointLocation", "/home/kr_stevejobs/log_dir/app_logs/console/spark-streaming/new_user_onboarding/")
       .start("test-new-users")
     }
     

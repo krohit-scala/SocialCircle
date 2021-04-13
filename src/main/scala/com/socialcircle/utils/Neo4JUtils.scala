@@ -33,10 +33,10 @@ object Neo4JUtils extends Serializable {
 
   // Insert User object in Neo4J
   def insertUser(user: User): Int = {
-    //val session = neo4jdriver.session
     val session = initNeo4jDriverSession
     val genderLabel : String = if(user.gender == "Male" || user.gender == "male") "Male" else "Female"
-    val script : String = s"""
+    
+      val script : String = s"""
       |CREATE (
       |  user:DummyUser:${genderLabel} {
       |    a: "U${user.userId}",
@@ -56,13 +56,57 @@ object Neo4JUtils extends Serializable {
       |  user:ActiveUsers ${JsonUtils.getJsonFromObject(user).replaceAll("\"(\\w+)\":", "$1:")}
       |)
       """.stripMargin
-    println(s"${script1}")
+    
+    // "script1" is equivalent to "script"
+    // println(s"${script1}")
     
     val result: Result = session.run(script1)
     session.close()
     result.consume().counters().nodesCreated()
   }
 
+  // Insert User Following Relation in Neo4J
+  def addNewFollowing(row: Row): Int = {
+    val session = initNeo4jDriverSession
+
+    val user1 = row(0).toString // UserId1
+    val user2 = row(1).toString // UserId2
+    val ts = row(2).toString    // timestamp in long format
+    
+    // Create the cypher query to add relation
+    val script : String = s"""
+      |MATCH (u1:ActiveUsers), (u2:ActiveUsers)
+      |WHERE u1.userId=${user1} AND u2.userId=${user2}
+      |CREATE (u1)-[:FOLLOWS {since_ts: ${ts}} ]->(u2)
+      """.stripMargin
+      
+    val result: Result = session.run(script)
+    session.close()
+    result.consume().counters().nodesCreated()
+  }
+  
+  // Insert User Unfollowing Relation in Neo4J
+  def addNewUnfollowing(row: Row): Int = {
+    val session = initNeo4jDriverSession
+
+    val user1 = row(0).toString // UserId1
+    val user2 = row(1).toString // UserId2
+    val ts = row(2).toString    // timestamp in long format
+    
+    // Create the cypher query to add relation
+    val script : String = s"""
+      |MATCH (u1:ActiveUsers)-[r:FOLLOWS]->(u2:ActiveUsers)
+      |WHERE u1.userId=${user1} AND u2.userId=${user2}
+      |DELETE r
+      """.stripMargin
+      
+    val result: Result = session.run(script)
+    session.close()
+    result.consume().counters().nodesCreated()
+  }
+  
+  
+  
   // General method to write batch dataframe to Neo4J
   def writeData(df: DataFrame, saveMode: SaveMode, labels: String) = {
     df.write.format("org.neo4j.spark.DataSource")

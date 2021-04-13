@@ -10,13 +10,14 @@ import com.socialcircle.dtos.User
 import org.apache.spark.sql.functions.{from_json, split, when, count, coalesce}
 import com.socialcircle.dtos.UserStats
 import com.socialcircle.consumer.foreachwriters.RedisForeachWriter
+import com.socialcircle.consumer.foreachwriters.NewFollowingNeo4JForeachWriter
 
 object SparkConsumerNewFollowing {
   
   // REDIS CONNECTOR - FOREACHWRITER SINK
   val redisHost = PropertyFileUtils.getPropertyFromFile("redis.server.ip")
   val redisPort = PropertyFileUtils.getPropertyFromFile("redis.server.port")
-  val userStatsHash = PropertyFileUtils.getPropertyFromFile("user.following.stats.hash")
+  val userStatsHash = PropertyFileUtils.getPropertyFromFile("user.stats.hash")
   
   val redisUserStatsWriter : RedisForeachWriter = new RedisForeachWriter(redisHost, redisPort, userStatsHash)
   
@@ -24,7 +25,7 @@ object SparkConsumerNewFollowing {
     val spark = SparkUtils.getSparkSession
     import spark.implicits._
     
-    // 2. Read user following data from Kafka
+    // 1. Read user following data from Kafka
     val newFollowingDf = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", PropertyFileUtils.getPropertyFromFile("kafka.bootstrap.servers"))
@@ -54,7 +55,7 @@ object SparkConsumerNewFollowing {
 		+-----+-----+---+
 		*/
     
-    // Get aggregated followers and followings from Kafka Stream
+    // 2. Compute aggregated followers and followings from Kafka Stream
     val followingDf = newFollowingDf.groupBy("user1").agg(count("*").alias("followings1")).withColumnRenamed("user1", "uId1")
     val followerDf = newFollowingDf.groupBy("user2").agg(count("*").alias("followers1")).withColumnRenamed("user2", "uId2")
     val streamingSummaryDf = followingDf.join(
@@ -86,7 +87,7 @@ object SparkConsumerNewFollowing {
     // Followings: Number of people you follow
     val userStatsSchema = Encoders.product[UserStats].schema
     
-    // How many followers a given user has?
+    // 3. How many followers a given user has before this data stream arrived?
     val userStatsDf = spark.read
       .format("org.apache.spark.sql.redis")
       .schema(userStatsSchema)
@@ -101,7 +102,7 @@ object SparkConsumerNewFollowing {
     // For updating the followers/followings
     val joinCondition = ($"uId" === $"userId")
     
-    // Merge streaming summary with the existing summary
+    // 4. Merge streaming summary with the existing summary
     val colList = Seq("followers", "followings", "followers1", "followings1") // List of columns for null handling
     val newSummaryDf = streamingSummaryDf.joinWith(
       userStatsDf,
@@ -126,7 +127,7 @@ object SparkConsumerNewFollowing {
       $"new_followers".alias("followers")
     )
 
-    // Console output writer (for logging)
+    // 5.1. Console output writer (for logging)
     val q1 = {
       newSummaryDf.writeStream
       .outputMode("update")
@@ -134,14 +135,43 @@ object SparkConsumerNewFollowing {
       .start()
     }
     
-    // Update Redis Hash
+    // 5.2. Update Redis Hash with new User Stats
     val q2 = newSummaryDf.writeStream
       .outputMode("update")
       .foreach(redisUserStatsWriter)
       .start
 
+    // 5.3. Push streaming data to Elasticsearch for archival
+    // Checkpoint location 
+    val sparkCheckpointLocation = "/home/kr_stevejobs/log_dir/app_logs/spark-streaming_logs/es_writer_new_following/"
+
+    val q3 = {
+      newFollowingDf
+        .writeStream
+        .outputMode("append")
+        .format("org.elasticsearch.spark.sql")
+        .option("checkpointLocation", "/home/kr_stevejobs/log_dir/app_logs/console/spark-streaming/new_user_following/")
+        .start("new-users-following")
+    }
+
+    // 5.4. Add following relationship to Neo4J
+    
+    // Neo4j Writer
+    // Instantiate the NewUserNeo4JForeachWriter
+    val neo4JForeachWriter = new NewFollowingNeo4JForeachWriter
+    val q4 = {
+      newFollowingDf
+        .writeStream
+        .outputMode("update")
+        .foreach(neo4JForeachWriter)
+        .start
+    }
+
+    // Start Streaming :)
     q1.awaitTermination
     q2.awaitTermination
+    q3.awaitTermination
+    q4.awaitTermination
     // User2's Followings increased, thanks to User1
   }
 }

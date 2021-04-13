@@ -26,7 +26,7 @@ class RedisForeachWriter(val host: String, port: String, val hashName: String) e
   override def process(record: Row) = {
     val u_id = record.getString(0);
     
-    if(!(u_id == null || u_id.isEmpty())){
+    if(!(u_id == null || u_id.isEmpty)){
       val columns : Array[String] = record.schema.fieldNames
   
       if(jedis == null){
@@ -34,7 +34,7 @@ class RedisForeachWriter(val host: String, port: String, val hashName: String) e
       }
       
       for(i <- 0 until columns.length){
-        if(! ((record.getString(i) == null) || (record.getString(i).isEmpty()) || record.getString(i) == "") )
+        if(! ((record.getString(i) == null) || (record.getString(i).isEmpty) || record.getString(i) == "") )
           jedis.hset(s"${hashName}:" + u_id, columns(i), record.getString(i))
       }
     }
