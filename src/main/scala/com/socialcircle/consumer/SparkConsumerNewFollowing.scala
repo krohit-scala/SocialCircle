@@ -52,7 +52,7 @@ object SparkConsumerNewFollowing {
     | 1001| 1002|ts1|
     | 1002| 1001|ts2|
     | 1003| 1004|ts3|
-		+-----+-----+---+
+    +-----+-----+---+
 		*/
     
     // 2. Compute aggregated followers and followings from Kafka Stream
