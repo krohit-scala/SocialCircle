@@ -53,7 +53,7 @@ object SparkConsumerNewUnfollowing {
     | 1002| 1001|ts2|
     | 1003| 1004|ts3|
     +-----+-----+---+
-		*/
+    */
     
     // 2. Get aggregated followers and followings from Kafka Stream
     val followingDf = newFollowingDf.groupBy("user1").agg(count("*").alias("followings1")).withColumnRenamed("user1", "uId1")
